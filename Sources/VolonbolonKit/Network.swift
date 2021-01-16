@@ -8,7 +8,7 @@
 import Foundation
 import Combine
 
-protocol APIManager {
+public protocol APIManager {
     func loadData(from url: URL) -> AnyPublisher<Data, VolonbolonKit.Networking.Error>
     func sendData<T: Codable>(to url: URL, body: T) -> AnyPublisher<Data, URLError>
 }
