@@ -20,7 +20,7 @@ extension VolonbolonKit {
         /// - Parameter name: propopsed name for the file
         /// - Throws: Error in case Decoding fails
         /// - Returns: Codable type fully hydrated
-        static func loadValue<T: Codable>(named name: String) throws -> T {
+        static public func loadValue<T: Codable>(named name: String) throws -> T {
             let fileURL = FileIOHelper.fileURL(name: name)
             let data = try Data(contentsOf: fileURL)
             return try JSONDecoder().decode(T.self, from: data)
@@ -32,7 +32,7 @@ extension VolonbolonKit {
         ///   - value: Codable type to encode
         ///   - name: propopsed name for the file
         /// - Throws: Error in case Encoding operation fails
-        static func save<T: Codable>(value: T, named name: String) throws {
+        static public func save<T: Codable>(value: T, named name: String) throws {
             let data = try JSONEncoder().encode(value)
             let fileURL = FileIOHelper.fileURL(name: name)
             try data.write(to: fileURL)
