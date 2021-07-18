@@ -13,7 +13,7 @@ extension URLSession: NetworkSession {
         let apiQueue = DispatchQueue(label: "API",
                                      qos: .default,
                                      attributes: .concurrent)
-        return URLSession.shared
+        return self
             .dataTaskPublisher(for: url)
             .receive(on: apiQueue)
             .map(\.data)
@@ -24,7 +24,7 @@ extension URLSession: NetworkSession {
         let apiQueue = DispatchQueue(label: "API",
                                      qos: .default,
                                      attributes: .concurrent)
-        return URLSession.shared
+        return self
             .dataTaskPublisher(for: request)
             .receive(on: apiQueue)
             .map(\.data)

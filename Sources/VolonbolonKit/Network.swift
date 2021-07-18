@@ -33,8 +33,14 @@ extension VolonbolonKit { // Network
         }
         
         public class Manager: APIManager {
-            internal var session: NetworkSession = URLSession.shared
-            public init() {}
+            let session: NetworkSession!
+            init(session: NetworkSession) {
+                self.session = session
+            }
+            
+            convenience public init() {
+                self.init(session: URLSession.shared)
+            }
             
             /// Retrieves data from the specied location
             /// - Parameters:

@@ -3,78 +3,104 @@ import Combine
 
 @testable import VolonbolonKit
 
-class NetworkSessionMock: NetworkSession {
-    let data: Data
+class MockURLProtocol: URLProtocol {
+    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
     
-    init(data: Data) {
-        self.data = data
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
     }
     
-    func get(from url: URL) -> AnyPublisher<Data, URLError> {
-        return Just(data)
-            .setFailureType(to: URLError.self)
-            .eraseToAnyPublisher()
+    override class func canInit(with task: URLSessionTask) -> Bool {
+        true
     }
     
-    func post(with request: URLRequest) -> AnyPublisher<Data, URLError> {
-        return Empty<Data, URLError>()
-            .eraseToAnyPublisher()
-    }
-}
-
-class NetworkSessionMockError: NetworkSession {
-    let error: URLError
-    
-    init(error: URLError) {
-        self.error = error
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
     }
     
-    func get(from url: URL) -> AnyPublisher<Data, URLError> {
-        return Fail<Data, URLError>(error: error)
-            .eraseToAnyPublisher()
+    override func startLoading() {
+        guard let handler = MockURLProtocol.requestHandler else {
+            XCTFail("Received unexpected request with no handler set")
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            guard 200...299 ~= response.statusCode else {
+                let error = URLError(URLError.Code(rawValue: response.statusCode))
+                client?.urlProtocol(self, didFailWithError: error)
+                return
+            }
+            client?.urlProtocol(self,
+                                didReceive: response,
+                                cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
     }
     
-    func post(with request: URLRequest) -> AnyPublisher<Data, URLError> {
-        return Empty<Data, URLError>()
-            .eraseToAnyPublisher()
-    }
+    override func stopLoading() {}
 }
 
 final class VolonbolonKitTests: XCTestCase {
     var subscriptions = [AnyCancellable]()
+    var url: URL!
+    var session: URLSession!
+    
+    override func setUp() {
+        self.url = URLBuilder()
+            .set(scheme: "https")
+            .set(host: "localhost")
+            .set(path: "path")
+            .build()!
+        
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        self.session = URLSession(configuration: configuration)
+    }
     
     func testData() {
         let expectation = XCTestExpectation(description: "Expect loading data")
-        let msg = "Hello"
-        guard let url = URL(string: "http://localhost/"),
-              let data = msg.data(using: .utf8) else {
-            fatalError("Unable to get a URL")
+
+        let msg = "Hello World"
+        MockURLProtocol.requestHandler = { request in
+            let mockData = "{\"msg\": \"\(msg)\"}".data(using: .utf8)!
+            let respose = HTTPURLResponse(url: request.url!,
+                                          statusCode: 200,
+                                          httpVersion: "HTTP/1.1",
+                                          headerFields: ["Content-type": "application/json"])!
+            return (respose, mockData)
         }
-        
-        let session = NetworkSessionMock(data: data)
-        
+                
         session.get(from: url)
             .sink(receiveCompletion: { _ in expectation.fulfill() },
                   receiveValue: { data in
-                    guard let str = String(data: data, encoding: .utf8) else {
-                        fatalError("Unable to retreive a string from data")
+                    do {
+                        let payload = try JSONDecoder().decode([String: String].self, from: data)
+                        XCTAssertEqual(payload["msg"], msg, "\(msg) should be equal to 'Hello World'")
+                    } catch {
+                        XCTFail("Unable to parse response")
+                        return
                     }
-                    XCTAssertEqual(str, msg, "\(str) should be equal to \(msg)")
                   })
             .store(in: &subscriptions)
         
-        wait(for: [expectation], timeout: 30)
+        wait(for: [expectation], timeout: 1)
     }
     
     func testError() {
         let expectation = XCTestExpectation(description: "Expect loading Error")
-        let error = URLError(URLError.Code(rawValue: 403))
-        let session = NetworkSessionMockError(error: error)
         
-        guard let url = URL(string: "http://localhost/") else {
-            fatalError("Unable to get a URL")
+        MockURLProtocol.requestHandler = { request in
+            let mockData = Data()
+            let respose = HTTPURLResponse(url: request.url!,
+                                          statusCode: 403,
+                                          httpVersion: "HTTP/1.1",
+                                          headerFields: ["Content-type": "application/json"])!
+            return (respose, mockData)
         }
-        
+
         session.get(from: url)
             .sink(receiveCompletion: { completion in
                 switch completion {
@@ -87,8 +113,8 @@ final class VolonbolonKitTests: XCTestCase {
             },
                   receiveValue: { print($0) })
             .store(in: &subscriptions)
-        
-        wait(for: [expectation], timeout: 30)
+
+        wait(for: [expectation], timeout: 1)
     }
 
     static var allTests = [
